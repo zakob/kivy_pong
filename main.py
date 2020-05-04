@@ -64,14 +64,14 @@ class PongPaddle(Widget):
         else:
             return (False, None, None)
 
-    def bounce_ball(self, ball, enemy_pad, max_vel=1100):
+    def bounce_ball(self, ball, enemy_pad):
         check, x, y = self.check_collision(ball, enemy_pad)
         if check:
             # print(x, y)
             vx, vy = ball.velocity
             offset = (ball.center_y - self.center_y) / (self.height / 2)
             bounced = Vector(-1 * vx, vy)
-            if Vector(ball.velocity).length() < max_vel:
+            if Vector(ball.velocity).length() < ball.max_vel:
                 m = 1.1
             else:
                 m = 1
@@ -84,6 +84,8 @@ class PongBall(Widget):
     velocity_y = NumericProperty(0)
     velocity = ReferenceListProperty(velocity_x, velocity_y)
     r = NumericProperty(25)
+    init_vel = NumericProperty(250)
+    max_vel = NumericProperty(1000)
 
     def move(self, dt):
         self.pos = dt * Vector(*self.velocity) + self.pos
@@ -190,7 +192,7 @@ class PongGame(Widget):
         elif text == '2 players':
             self.state_menu = 0
             self.remove_widget(self.gm_main)
-            self.serve_ball(vel=(choice([-1, 1])*250, 0))
+            self.serve_ball(vel=(choice([-1, 1])*self.ball.init_vel, 0))
             self.start_game()
         elif text == 'Restart':
             self.remove_widget(self.gm_end)
@@ -200,7 +202,7 @@ class PongGame(Widget):
             self.player2.center_y = self.center_y
             self.state_menu = 0
             self.remove_widget(self.gm_main)
-            self.serve_ball(vel=(choice([-1, 1])*250, 0))
+            self.serve_ball(vel=(choice([-1, 1])*self.ball.init_vel, 0))
             self.start_game()
         elif text == 'Return to Main menu':
             if self.state_menu == 1:
@@ -213,11 +215,12 @@ class PongGame(Widget):
             self.player2.score = 0
             self.player1.center_y = self.center_y
             self.player2.center_y = self.center_y
-            self.serve_ball(vel=(250, 0))
+            self.serve_ball(vel=(self.ball.init_vel, 0))
         else:
             pass
 
-    def serve_ball(self, vel=(250, 0)):
+    # def serve_ball(self, vel=(250, 0)):
+    def serve_ball(self, vel):
         self.player1.active_switch = 1
         self.player2.active_switch = 1
         self.ball.center = self.center
@@ -263,7 +266,9 @@ class PongGame(Widget):
         self.player2.bounce_ball(self.ball, self.player1)
 
         # bounce ball off bottom or top
-        if (self.ball.y < self.y) or (self.ball.top > self.top):
+        if (self.ball.y < self.y) and (self.ball.velocity_y < 0):
+            self.ball.velocity_y *= -1
+        if (self.ball.top > self.top) and (self.ball.velocity_y > 0):
             self.ball.velocity_y *= -1
 
         # went of to a side to score point?
@@ -274,7 +279,7 @@ class PongGame(Widget):
                 self.state_menu = 2
                 self.gm_end = gamemenu.GameMenu.list_menu_items('Player 2 win!!!', self.gm_end_options)
                 self.add_widget(self.gm_end)
-            self.serve_ball(vel=(250, 0))
+            self.serve_ball(vel=(self.ball.init_vel, 0))
         if self.ball.center_x > self.width:
             self.player1.score += 1
             if self.player1.score == self.max_score:
@@ -282,7 +287,7 @@ class PongGame(Widget):
                 self.state_menu = 2
                 self.gm_end = gamemenu.GameMenu.list_menu_items('Player 1 win!!!', self.gm_end_options)
                 self.add_widget(self.gm_end)
-            self.serve_ball(vel=(-250, 0))
+            self.serve_ball(vel=(-self.ball.init_vel, 0))
         
     def update(self, dt):
         self.ball_update(dt)
