@@ -1,7 +1,3 @@
-# from kivy.config import Config
-# Config.set('kivy', 'exit_on_escape', '0')
-# Config.set('graphics', 'resizable', '0')
-
 from kivy.app import App
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
@@ -21,7 +17,7 @@ class GameMenu(Widget):
                         self.color_list[2], 1)
         self.color = (self.color_list[0],
                       self.color_list[1], 
-                      self.color_list[2], 0.2)
+                      self.color_list[2], 0.5)
     
     @classmethod
     def list_menu_items(cls, menu_title, menu_items):
