@@ -4,6 +4,7 @@ Improved https://kivy.org/doc/stable/tutorials/pong.html
 
 1. Game mechanics changed.
 2. Game menu added.
+3. Added AI.
 
 ## Create a package for Windows
 
