@@ -72,4 +72,7 @@ class GameMenu(Widget):
         elif self.active_item == n:
             self.active_item = 0
         
-        self.menu_items[self.active_item].color = self.color_f        
+        self.menu_items[self.active_item].color = self.color_f
+
+
+class difficultyMenu(Widget):pass

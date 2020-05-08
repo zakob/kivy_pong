@@ -29,16 +29,16 @@
             size: 10, self.height
     
     Label:
-        font_size: 70  
+        font_size: 70
         center_x: root.width / 4
         top: root.top - 50
-        text: 'p1: ' + str(root.player1.score)
+        text: root.player1.state + ': ' + str(root.player1.score)
         
     Label:
-        font_size: 70  
+        font_size: 70
         center_x: root.width * 3 / 4
         top: root.top - 50
-        text: 'p2: ' + str(root.player2.score)
+        text: root.player2.state + ': ' + str(root.player2.score)
 
     PongBall:
         id: pong_ball

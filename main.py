@@ -9,7 +9,7 @@ from kivy.graphics import Rectangle
 from kivy.graphics import Color
 from kivy.uix.gridlayout import GridLayout
 from kivy.properties import (
-    NumericProperty, ReferenceListProperty, ObjectProperty
+    NumericProperty, StringProperty, ReferenceListProperty, ObjectProperty
 )
 from kivy.vector import Vector
 from kivy.clock import Clock
@@ -22,7 +22,18 @@ from random import choice
 
 class PongPaddle(Widget):
     score = NumericProperty(0)
+    state = StringProperty('')
     active_switch = NumericProperty(1)
+    init_step = NumericProperty(100)
+    max_step = NumericProperty(500)
+    current_step = NumericProperty(-1)
+    ai_delay = NumericProperty(0.9)
+    ai_time = NumericProperty(0)
+
+    def init_pad(self, state, box_size_x, box_size_y):
+        self.state = state
+        self.box_size_x = box_size_x
+        self.box_size_y = box_size_y
 
     def check_collision(self, ball, enemy_pad):
         if self.active_switch == 1:
@@ -67,7 +78,6 @@ class PongPaddle(Widget):
     def bounce_ball(self, ball, enemy_pad):
         check, x, y = self.check_collision(ball, enemy_pad)
         if check:
-            # print(x, y)
             vx, vy = ball.velocity
             offset = (ball.center_y - self.center_y) / (self.height / 2)
             bounced = Vector(-1 * vx, vy)
@@ -77,6 +87,49 @@ class PongPaddle(Widget):
                 m = 1
             vel = bounced * m
             ball.velocity = vel.x, vel.y + offset * bounced.length() * 0.7
+            
+            ball.pos_pad_collision = x, y
+            ball.vel_pad_collision = ball.velocity
+            ball.pos_next_collision()
+    
+    def move(self, dt, up=False, down=False):
+        if self.current_step != -1:
+            if self.current_step < self.max_step:
+                self.current_step += self.init_step
+        else:
+            self.current_step = self.init_step
+
+        step_size = self.current_step * dt
+
+        if up:
+            if self.center_y < self.box_size_y:
+                self.center_y += step_size
+        elif down:
+            if self.center_y > 0:
+                self.center_y -= step_size    
+    
+    def pad_ai(self, ball, dt):
+        if self.active_switch == 1:
+            if self.ai_time < self.ai_delay:
+                self.ai_time += dt
+            else:
+                epsilon = 4 * dt * self.init_step
+                top = self.top
+                bottom = self.y
+                if abs(self.top - ball.predict_pad_collision_y) > abs(self.y - ball.predict_pad_collision_y):
+                    target = self.y
+                else:
+                    target = self.top
+                if abs(target - ball.predict_pad_collision_y) > epsilon:
+                    if target < ball.predict_pad_collision_y:
+                        self.move(dt, up=True)
+                    elif target > ball.predict_pad_collision_y:
+                        self.move(dt, down=True)
+                    else:
+                        pass
+                else:
+                    self.ai_time = 0
+
 
 
 class PongBall(Widget):
@@ -86,9 +139,44 @@ class PongBall(Widget):
     r = NumericProperty(25)
     init_vel = NumericProperty(250)
     max_vel = NumericProperty(1000)
+    pos_pad_collision_x = NumericProperty(0)
+    pos_pad_collision_y = NumericProperty(0)
+    pos_pad_collision = ReferenceListProperty(pos_pad_collision_x, pos_pad_collision_y)
+    vel_pad_collision_x = NumericProperty(0)
+    vel_pad_collision_y = NumericProperty(0)
+    vel_pad_collision = ReferenceListProperty(vel_pad_collision_x, vel_pad_collision_y)
+    predict_pad_collision_x = NumericProperty(-1)
+    predict_pad_collision_y = NumericProperty(-1)
+    predict_pad_collision = ReferenceListProperty(predict_pad_collision_x, predict_pad_collision_x)
 
+    def init_ball(self, box_size_x, box_size_y):
+        self.box_size_x = box_size_x
+        self.box_size_y = box_size_y
+        # need recalculate all: size, velocity
+    
     def move(self, dt):
         self.pos = dt * Vector(*self.velocity) + self.pos
+    
+    def pos_next_collision(self):
+        self.predict_pad_collision_x = self.box_size_x - self.pos_pad_collision_x
+        Sy = abs((self.box_size_x - 2 * self.pos_pad_collision_x) * self.vel_pad_collision_y / self.vel_pad_collision_x)
+        # Sy = abs(700 * self.vel_pad_collision_y / self.vel_pad_collision_x)
+        H = self.box_size_y - 2 * self.r
+        if self.vel_pad_collision_y > 0:
+            n, dy = divmod(Sy + (self.pos_pad_collision_y - self.r), H)
+            if n % 2 == 0:
+                self.predict_pad_collision_y = dy + self.r
+            else:
+                self.predict_pad_collision_y = H - dy + self.r
+        elif self.vel_pad_collision_y < 0:
+            n, dy = divmod(Sy + (self.box_size_y - self.pos_pad_collision_y - self.r), H)
+            if n % 2 == 0:
+                self.predict_pad_collision_y = H - dy + self.r
+            else:
+                self.predict_pad_collision_y = dy + self.r
+        else:
+            self.predict_pad_collision_y = self.pos_pad_collision_y
+
 
 
 class PongGame(Widget):
@@ -103,12 +191,11 @@ class PongGame(Widget):
         self._keyboard.bind(on_key_up=self._on_keyboard_up)
 
         self.keysPressed = set()
-        
-        self.p1 = ''
-        self.p2 = ''
 
-        self.m_player1 = None
-        self.m_player2 = None
+        # print(Window.size)
+        self.player1.init_pad('Player 1', Window.size[0], Window.size[1])
+        self.player2.init_pad('AI 2', Window.size[0], Window.size[1])
+        self.ball.init_ball(Window.size[0], Window.size[1])
 
         self.max_score = 10
 
@@ -155,6 +242,14 @@ class PongGame(Widget):
 
             if self.state_menu == -1:
                 self.gm_main.navigate(keycode[1])
+
+                if self.gm_main_options[self.gm_main.active_item] == '1 player':
+                    self.player2.state = 'AI 2'
+                elif self.gm_main_options[self.gm_main.active_item] == '2 players':
+                    self.player2.state = 'Player 2'
+                else:
+                    pass
+
                 if 'enter' in keycode[1]:
                     self.menu_actions(self.gm_main_options[self.gm_main.active_item])
 
@@ -173,10 +268,6 @@ class PongGame(Widget):
     def _on_keyboard_up(self, keybord, keycode):
         if keycode[1] != 'escape':
             if keycode[1] in self.keysPressed:
-                if keycode[1] in ['w', 's']:
-                    self.m_player1 = None
-                if keycode[1] in ['up', 'down']:
-                    self.m_player2 = None
                 self.keysPressed.remove(keycode[1])
 
     def menu_actions(self, text):
@@ -188,7 +279,10 @@ class PongGame(Widget):
             self.start_game()
             self.keysPressed.remove('escape')
         elif text == '1 player':
-            print('AI is not ready.')
+            self.state_menu = 0
+            self.remove_widget(self.gm_main)
+            self.serve_ball(vel=(choice([-1, 1])*self.ball.init_vel, 0))
+            self.start_game()
         elif text == '2 players':
             self.state_menu = 0
             self.remove_widget(self.gm_main)
@@ -201,7 +295,6 @@ class PongGame(Widget):
             self.player1.center_y = self.center_y
             self.player2.center_y = self.center_y
             self.state_menu = 0
-            self.remove_widget(self.gm_main)
             self.serve_ball(vel=(choice([-1, 1])*self.ball.init_vel, 0))
             self.start_game()
         elif text == 'Return to Main menu':
@@ -223,40 +316,27 @@ class PongGame(Widget):
     def serve_ball(self, vel):
         self.player1.active_switch = 1
         self.player2.active_switch = 1
+        self.ball.predict_pad_collision_y = 0.5 * self.top
         self.ball.center = self.center
         self.ball.velocity = vel
 
     def move_pad(self, dt):
-        if self.m_player1:
-            if self.m_player1 < 500:
-                self.m_player1 += 100
-        else:
-            self.m_player1 = 100
-        
-        if self.m_player2:
-            if self.m_player2 < 500:
-                self.m_player2 += 10
-        else:
-            self.m_player2 = 100
-
-        step_size1 = self.m_player1 * dt
-        step_size2 = self.m_player2 * dt
-
         if 'w' in self.keysPressed:
-            if self.player1.center_y < self.top:
-                self.player1.center_y += step_size1
-
+            self.player1.move(dt, up=True)
         elif 's' in self.keysPressed:
-            if self.player1.center_y > self.y:
-                self.player1.center_y -= step_size1
-
-        if 'up' in self.keysPressed:
-            if self.player2.center_y < self.top:
-                self.player2.center_y += step_size2
-
-        elif 'down' in self.keysPressed:
-            if self.player2.center_y > self.y:
-                self.player2.center_y -= step_size2
+            self.player1.move(dt, down=True)
+        else:
+            self.player1.current_step = -1
+        
+        if self.player2.state == 'AI 2':
+            self.player2.pad_ai(self.ball, dt)
+        else:
+            if 'up' in self.keysPressed:
+                self.player2.move(dt, up=True)
+            elif 'down' in self.keysPressed:
+                self.player2.move(dt, down=True)
+            else:
+                self.player2.current_step = -1
 
     def ball_update(self, dt):
         self.ball.move(dt)
@@ -277,7 +357,7 @@ class PongGame(Widget):
             if self.player2.score == self.max_score:
                 self.stop_game()
                 self.state_menu = 2
-                self.gm_end = gamemenu.GameMenu.list_menu_items('Player 2 win!!!', self.gm_end_options)
+                self.gm_end = gamemenu.GameMenu.list_menu_items(self.player2.state + ' win!!!', self.gm_end_options)
                 self.add_widget(self.gm_end)
             self.serve_ball(vel=(self.ball.init_vel, 0))
         if self.ball.center_x > self.width:
@@ -285,7 +365,7 @@ class PongGame(Widget):
             if self.player1.score == self.max_score:
                 self.stop_game()
                 self.state_menu = 2
-                self.gm_end = gamemenu.GameMenu.list_menu_items('Player 1 win!!!', self.gm_end_options)
+                self.gm_end = gamemenu.GameMenu.list_menu_items(self.player1.state + ' win!!!', self.gm_end_options)
                 self.add_widget(self.gm_end)
             self.serve_ball(vel=(-self.ball.init_vel, 0))
         
